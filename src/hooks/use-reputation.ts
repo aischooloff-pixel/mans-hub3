@@ -62,6 +62,3 @@ export function useReputation() {
 
   return { getMyReputation, loading };
 }
-
-  return { getMyReputation, loading };
-}
