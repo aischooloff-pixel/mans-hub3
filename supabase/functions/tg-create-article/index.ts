@@ -151,6 +151,7 @@ Deno.serve(async (req) => {
       .insert({
         author_id: profile.id,
         category_id: article.category_id || null,
+        topic: (article.topic && String(article.topic).trim().length ? String(article.topic).trim() : null),
         title: article.title,
         body: article.body,
         preview,
@@ -158,6 +159,7 @@ Deno.serve(async (req) => {
         media_type: mediaType || null,
         is_anonymous: !!article.is_anonymous,
         allow_comments: article.allow_comments !== false,
+        sources: Array.isArray(article.sources) && article.sources.length ? article.sources : null,
         status: 'pending',
       })
       .select('*')

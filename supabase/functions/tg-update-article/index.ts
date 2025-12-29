@@ -7,6 +7,7 @@ const corsHeaders = {
 
 const TELEGRAM_BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -168,14 +169,15 @@ Deno.serve(async (req) => {
     // Send moderation request for the edit via direct HTTP call
     try {
       const sendEditModerationUrl = `${SUPABASE_URL}/functions/v1/send-edit-moderation`;
-      const modResponse = await fetch(sendEditModerationUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        },
-        body: JSON.stringify({ articleId }),
-      });
+       const modResponse = await fetch(sendEditModerationUrl, {
+         method: 'POST',
+         headers: {
+           'Content-Type': 'application/json',
+           apikey: SUPABASE_ANON_KEY,
+           Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+         },
+         body: JSON.stringify({ articleId }),
+       });
       const modResult = await modResponse.json();
       console.log('[tg-update-article] send-edit-moderation response:', modResult);
     } catch (modError) {

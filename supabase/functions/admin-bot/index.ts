@@ -1985,11 +1985,12 @@ async function handleApprove(callbackQuery: any, shortId: string) {
 
   const { data: article } = await supabase
     .from('articles')
-    .select('title, author:author_id(telegram_id, first_name, username)')
+    .select('title, topic, author:author_id(telegram_id, first_name, username)')
     .eq('id', articleId)
     .maybeSingle();
 
   const authorData = article?.author as any;
+  const notifyLabel = (article?.topic && String(article.topic).trim().length ? article.topic : article?.title) || 'ваша статья';
 
   await supabase.from('moderation_logs').insert({
     article_id: articleId,
@@ -2002,7 +2003,7 @@ async function handleApprove(callbackQuery: any, shortId: string) {
       authorData.telegram_id,
       `✅ <b>Ваша статья одобрена!</b>
 
-📝 "${article?.title}"
+📝 "${notifyLabel}"
 
 Статья опубликована и доступна для всех пользователей в приложении BoysHub.`
     );
