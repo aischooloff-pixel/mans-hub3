@@ -146,10 +146,20 @@ export default function Index() {
               ))}
             </div>
           </section>
-        ) : featuredArticles.length > 0 ? (
+        ) : (() => {
+          // Filter articles by selected category for "Популярное" section
+          const categoryFilteredArticles = selectedCategory
+            ? articles.filter((a) => a.category_id === selectedCategory.id)
+            : articles;
+          
+          const displayedFeaturedArticles = [...categoryFilteredArticles]
+            .sort((a, b) => (b.likes_count || 0) - (a.likes_count || 0))
+            .slice(0, 4);
+
+          return displayedFeaturedArticles.length > 0 ? (
           <ArticleCarousel
-            title="Популярное"
-            articles={featuredArticles.map(a => ({
+            title={selectedCategory ? selectedCategory.name : "Популярное"}
+            articles={displayedFeaturedArticles.map(a => ({
               id: a.id,
               author_id: a.author_id || '',
               author: (a.is_anonymous && !isAdmin) ? undefined : getAuthorDisplay(a.author),
@@ -172,7 +182,8 @@ export default function Index() {
             }))}
             className="mb-8"
           />
-        ) : null}
+        ) : null;
+        })()}
 
         {/* Podcasts */}
         <PodcastCarousel

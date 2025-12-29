@@ -1117,6 +1117,7 @@ async function handlePodcastUrlInput(chatId: number, userId: number, text: strin
   }
 
   if (state.step === 'title') {
+    // Accept any text as title (no YouTube validation here!)
     await supabase.from('admin_settings').upsert({
       key: `pending_podcast_${userId}`,
       value: JSON.stringify({ ...state, step: 'description', title: text.trim() }),
@@ -1125,7 +1126,6 @@ async function handlePodcastUrlInput(chatId: number, userId: number, text: strin
     await sendAdminMessage(chatId, `✅ Заголовок сохранён!
 
 Шаг 3/3: Отправьте описание подкаста`);
-    return true;
   }
 
   if (state.step === 'description') {
