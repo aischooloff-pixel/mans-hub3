@@ -13,7 +13,7 @@ import { SupportModal } from '@/components/profile/SupportModal';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Settings, Crown, FileText, Bookmark, History, Star, Send, Globe, HelpCircle, MessageCircle } from 'lucide-react';
+import { Settings, Crown, FileText, Bookmark, History, Star, Send, Globe, HelpCircle, MessageCircle, Heart, MessageSquare, PenLine, Trash2 } from 'lucide-react';
 import { useProfile } from '@/hooks/use-profile';
 import { useArticles, Article } from '@/hooks/use-articles';
 import { useReputation } from '@/hooks/use-reputation';
@@ -22,11 +22,21 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Article as TypeArticle } from '@/types';
 
+interface ActivityItem {
+  id: string;
+  type: 'like' | 'comment' | 'article_created' | 'article_updated' | 'article_deleted';
+  article_id: string;
+  article_title: string;
+  article_topic?: string;
+  created_at: string;
+  details?: string;
+}
+
 export default function Profile() {
   const { profile, loading: profileLoading, error: profileError, articlesCount, updateSocialLinks, refetch } = useProfile();
   const { getUserArticles, updateArticle, deleteArticle } = useArticles();
   const { getMyReputation } = useReputation();
-  const { openTelegramLink, getBotUsername } = useTelegram();
+  const { openTelegramLink, getBotUsername, webApp } = useTelegram();
   const [activeTab, setActiveTab] = useState('articles');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPremiumOpen, setIsPremiumOpen] = useState(false);
@@ -41,6 +51,8 @@ export default function Profile() {
   const [editingArticle, setEditingArticle] = useState<TypeArticle | null>(null);
   const [favoriteArticles, setFavoriteArticles] = useState<Article[]>([]);
   const [favoritesLoading, setFavoritesLoading] = useState(true);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(true);
 
   // Load user's articles
   useEffect(() => {
@@ -83,6 +95,26 @@ export default function Profile() {
     };
     loadFavorites();
   }, [profile?.id]);
+
+  // Load activities
+  useEffect(() => {
+    const loadActivities = async () => {
+      if (!webApp?.initData) return;
+      setActivitiesLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('tg-my-activity', {
+          body: { initData: webApp.initData, limit: 50 },
+        });
+        if (!error && data?.activities) {
+          setActivities(data.activities);
+        }
+      } catch (err) {
+        console.error('Error loading activities:', err);
+      }
+      setActivitiesLoading(false);
+    };
+    loadActivities();
+  }, [webApp?.initData]);
 
   // Load reputation
   useEffect(() => {
@@ -425,7 +457,76 @@ export default function Profile() {
             <TabsContent value="activity">
               <div className="rounded-2xl bg-card p-4">
                 <h2 className="mb-4 font-heading text-lg font-semibold">История активности</h2>
-                <p className="py-8 text-center text-muted-foreground">История пуста</p>
+                {activitiesLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-16 w-full rounded-xl" />
+                    ))}
+                  </div>
+                ) : activities.length > 0 ? (
+                  <div className="space-y-3">
+                    {activities.map((activity, index) => (
+                      <div
+                        key={activity.id}
+                        className="animate-slide-up flex items-start gap-3 p-3 rounded-lg bg-secondary/30"
+                        style={{ animationDelay: `${index * 30}ms` }}
+                      >
+                        <div className="flex-shrink-0 mt-0.5">
+                          {activity.type === 'like' && (
+                            <div className="h-8 w-8 rounded-full bg-red-500/20 flex items-center justify-center">
+                              <Heart className="h-4 w-4 text-red-500" />
+                            </div>
+                          )}
+                          {activity.type === 'comment' && (
+                            <div className="h-8 w-8 rounded-full bg-blue-500/20 flex items-center justify-center">
+                              <MessageSquare className="h-4 w-4 text-blue-500" />
+                            </div>
+                          )}
+                          {activity.type === 'article_created' && (
+                            <div className="h-8 w-8 rounded-full bg-green-500/20 flex items-center justify-center">
+                              <FileText className="h-4 w-4 text-green-500" />
+                            </div>
+                          )}
+                          {activity.type === 'article_updated' && (
+                            <div className="h-8 w-8 rounded-full bg-yellow-500/20 flex items-center justify-center">
+                              <PenLine className="h-4 w-4 text-yellow-500" />
+                            </div>
+                          )}
+                          {activity.type === 'article_deleted' && (
+                            <div className="h-8 w-8 rounded-full bg-red-500/20 flex items-center justify-center">
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">
+                            {activity.type === 'like' && 'Лайк'}
+                            {activity.type === 'comment' && 'Комментарий'}
+                            {activity.type === 'article_created' && 'Публикация статьи'}
+                            {activity.type === 'article_updated' && 'Редактирование статьи'}
+                            {activity.type === 'article_deleted' && 'Удаление статьи'}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {activity.article_topic || activity.article_title}
+                          </p>
+                          {activity.details && activity.type === 'comment' && (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-1">«{activity.details}»</p>
+                          )}
+                          <p className="text-xs text-muted-foreground/70 mt-1">
+                            {new Date(activity.created_at).toLocaleDateString('ru-RU', {
+                              day: 'numeric',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="py-8 text-center text-muted-foreground">История пуста</p>
+                )}
               </div>
             </TabsContent>
           </Tabs>
