@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
       // Increase likes count
       const { data: article } = await supabase
         .from('articles')
-        .select('likes_count')
+        .select('likes_count, author_id, title')
         .eq('id', articleId)
         .single();
       
@@ -126,6 +126,21 @@ Deno.serve(async (req) => {
         .from('articles')
         .update({ likes_count: (article?.likes_count || 0) + 1 })
         .eq('id', articleId);
+      
+      // Create notification for article author (if not liking own article)
+      if (article?.author_id && article.author_id !== profile.id) {
+        const articleTitle = article.title?.substring(0, 50) || 'статью';
+        await supabase
+          .from('notifications')
+          .insert({
+            user_profile_id: article.author_id,
+            from_user_id: profile.id,
+            article_id: articleId,
+            type: 'like',
+            message: `поставил лайк на "${articleTitle}"`,
+          });
+        console.log(`Notification created for author ${article.author_id}`);
+      }
       
       isLiked = true;
     }

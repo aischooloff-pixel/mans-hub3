@@ -115,10 +115,10 @@ Deno.serve(async (req) => {
         .from('article_favorites')
         .insert({ article_id: articleId, user_profile_id: profile.id });
       
-      // Increase favorites count
+      // Increase favorites count and get article info
       const { data: article } = await supabase
         .from('articles')
-        .select('favorites_count')
+        .select('favorites_count, author_id, title')
         .eq('id', articleId)
         .single();
       
@@ -126,6 +126,21 @@ Deno.serve(async (req) => {
         .from('articles')
         .update({ favorites_count: (article?.favorites_count || 0) + 1 })
         .eq('id', articleId);
+      
+      // Create notification for article author (if not adding own article to favorites)
+      if (article?.author_id && article.author_id !== profile.id) {
+        const articleTitle = article.title?.substring(0, 50) || 'статью';
+        await supabase
+          .from('notifications')
+          .insert({
+            user_profile_id: article.author_id,
+            from_user_id: profile.id,
+            article_id: articleId,
+            type: 'favorite',
+            message: `добавил в избранное "${articleTitle}"`,
+          });
+        console.log(`Notification created for author ${article.author_id}`);
+      }
       
       isFavorited = true;
     }

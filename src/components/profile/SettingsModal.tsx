@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -15,10 +15,21 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { profile, updatePrivacy } = useProfile();
 
   const [privacy, setPrivacy] = useState({
-    showAvatar: profile?.show_avatar ?? true,
-    showName: profile?.show_name ?? true,
-    showUsername: profile?.show_username ?? true,
+    showAvatar: true,
+    showName: true,
+    showUsername: true,
   });
+
+  // Sync privacy state with profile when it loads
+  useEffect(() => {
+    if (profile) {
+      setPrivacy({
+        showAvatar: profile.show_avatar ?? true,
+        showName: profile.show_name ?? true,
+        showUsername: profile.show_username ?? true,
+      });
+    }
+  }, [profile]);
 
   const handlePrivacyChange = async (key: 'showAvatar' | 'showName' | 'showUsername', value: boolean) => {
     const newPrivacy = { ...privacy, [key]: value };

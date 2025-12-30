@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
     // Check if article allows comments
     const { data: article } = await supabase
       .from('articles')
-      .select('id, allow_comments, comments_count')
+      .select('id, allow_comments, comments_count, author_id, title')
       .eq('id', articleId)
       .single();
 
@@ -128,6 +128,21 @@ Deno.serve(async (req) => {
       .from('articles')
       .update({ comments_count: (article.comments_count || 0) + 1 })
       .eq('id', articleId);
+
+    // Create notification for article author (if not commenting on own article)
+    if (article.author_id && article.author_id !== profile.id) {
+      const articleTitle = article.title?.substring(0, 50) || 'статью';
+      await supabase
+        .from('notifications')
+        .insert({
+          user_profile_id: article.author_id,
+          from_user_id: profile.id,
+          article_id: articleId,
+          type: 'comment',
+          message: `прокомментировал "${articleTitle}"`,
+        });
+      console.log(`Notification created for author ${article.author_id}`);
+    }
 
     console.log(`Comment added to article ${articleId} by user ${tgUser.id}`);
 
