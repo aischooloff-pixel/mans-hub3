@@ -162,6 +162,19 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'create') {
+      // Check product limit (1 product for Premium)
+      const { count: existingCount } = await supabase
+        .from('user_products')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_profile_id', profile.id);
+
+      if (existingCount && existingCount >= 1) {
+        return new Response(JSON.stringify({ error: 'Product limit reached. Maximum 1 product allowed.' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // Determine media type
       let mediaType = null;
       if (product.media_url) {
