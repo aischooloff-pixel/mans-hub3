@@ -18,6 +18,7 @@ export interface Article {
   likes_count: number | null;
   comments_count: number | null;
   favorites_count: number | null;
+  views_count: number | null;
   rep_score: number | null;
   allow_comments: boolean | null;
   sources?: string[] | null;
@@ -356,6 +357,28 @@ export function useArticles() {
     }
   }, []);
 
+  // Add view to article
+  const addView = useCallback(async (articleId: string) => {
+    const initData = getInitData();
+    if (!initData) return null;
+
+    try {
+      const { data, error } = await supabase.functions.invoke('tg-add-view', {
+        body: { initData, articleId },
+      });
+
+      if (error) {
+        console.error('Error adding view:', error);
+        return null;
+      }
+
+      return data;
+    } catch (err) {
+      console.error('Error adding view:', err);
+      return null;
+    }
+  }, []);
+
   return {
     loading,
     getApprovedArticles,
@@ -368,5 +391,6 @@ export function useArticles() {
     addComment,
     getArticleState,
     reportArticle,
+    addView,
   };
 }

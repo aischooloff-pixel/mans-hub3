@@ -107,6 +107,7 @@ export default function Hub() {
     likes_count: article.likes_count || 0,
     comments_count: article.comments_count || 0,
     favorites_count: article.favorites_count || 0,
+    views_count: article.views_count || 0,
     rep_score: article.rep_score || 0,
     allow_comments: article.allow_comments !== false,
     sources: article.sources || undefined,
@@ -230,7 +231,7 @@ export default function Hub() {
         onEditClick={(a) => { setIsMyArticlesOpen(false); setEditingArticle(a); }}
         onDeleteClick={handleDeleteArticle}
       />
-      <FullArticlesModal isOpen={isAllArticlesOpen} onClose={() => setIsAllArticlesOpen(false)} initialArticles={allArticles.map(mapArticle)} initialCategory={selectedCategory} />
+      <FullArticlesModal isOpen={isAllArticlesOpen} onClose={() => setIsAllArticlesOpen(false)} initialArticles={allArticles.map(mapArticle)} initialCategory={selectedCategory} onArticleCreated={handleArticleCreated} />
       <ArticleDetailModal isOpen={!!selectedArticle} onClose={() => setSelectedArticle(null)} article={selectedArticle} />
       <UpgradeToPlusModal isOpen={isUpgradeOpen} onClose={() => setIsUpgradeOpen(false)} feature="articles" />
     </div>

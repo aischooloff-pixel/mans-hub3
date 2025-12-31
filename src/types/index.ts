@@ -45,6 +45,7 @@ export interface Article {
   likes_count: number;
   comments_count: number;
   favorites_count: number;
+  views_count?: number;
   rep_score: number;
   allow_comments: boolean;
   sources?: string[];

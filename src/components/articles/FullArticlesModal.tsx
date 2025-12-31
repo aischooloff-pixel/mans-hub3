@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { X, Search, Heart, MessageCircle, Bookmark, ChevronDown, ChevronUp, Play, Loader2 } from 'lucide-react';
+import { X, Search, Heart, MessageCircle, Bookmark, TrendingUp, Share2, Loader2, Plus } from 'lucide-react';
 import { Article } from '@/types';
 import { Category } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CategoryList } from '@/components/categories/CategoryList';
 import { ArticleDetailModal } from '@/components/articles/ArticleDetailModal';
+import { CreateArticleModal } from '@/components/articles/CreateArticleModal';
 import { cn } from '@/lib/utils';
 import { mockCategories } from '@/data/mockData';
 import { supabase } from '@/integrations/supabase/client';
@@ -15,27 +16,28 @@ interface FullArticlesModalProps {
   onClose: () => void;
   initialArticles: Article[];
   initialCategory?: Category | null;
+  onArticleCreated?: () => void;
 }
 
 export function FullArticlesModal({ 
   isOpen, 
   onClose, 
   initialArticles,
-  initialCategory 
+  initialCategory,
+  onArticleCreated
 }: FullArticlesModalProps) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(initialCategory || null);
   const [searchQuery, setSearchQuery] = useState('');
   const [articles, setArticles] = useState<Article[]>(initialArticles);
   const [loading, setLoading] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setArticles(initialArticles);
       setSelectedCategory(initialCategory || null);
       setSearchQuery('');
-      setExpandedId(null);
     }
   }, [isOpen, initialArticles, initialCategory]);
 
@@ -76,6 +78,7 @@ export function FullArticlesModal({
           likes_count: a.likes_count || 0,
           comments_count: a.comments_count || 0,
           favorites_count: a.favorites_count || 0,
+          views_count: a.views_count || 0,
           rep_score: a.rep_score || 0,
           allow_comments: a.allow_comments !== false,
           created_at: a.created_at || '',
@@ -93,7 +96,6 @@ export function FullArticlesModal({
   const handleCategoryChange = (cat: Category | null) => {
     setSelectedCategory(cat);
     setSearchQuery('');
-    // Reset to initial articles filtered by category
     if (cat) {
       setArticles(initialArticles.filter(a => a.category_id === cat.id));
     } else {
@@ -101,11 +103,12 @@ export function FullArticlesModal({
     }
   };
 
-  if (!isOpen) return null;
-
-  const toggleExpand = (id: string) => {
-    setExpandedId(expandedId === id ? null : id);
+  const handleArticleCreated = () => {
+    setIsCreateModalOpen(false);
+    onArticleCreated?.();
   };
+
+  if (!isOpen) return null;
 
   const displayedArticles = selectedCategory && !searchQuery
     ? articles.filter(a => a.category_id === selectedCategory.id)
@@ -126,9 +129,15 @@ export function FullArticlesModal({
           <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border">
             <div className="flex items-center justify-between px-4 py-4">
               <h2 className="font-heading text-xl font-semibold">Все статьи</h2>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
-                <X className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button onClick={() => setIsCreateModalOpen(true)} size="sm" className="gap-1">
+                  <Plus className="h-4 w-4" />
+                  Написать
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             
             {/* Search */}
@@ -168,115 +177,73 @@ export function FullArticlesModal({
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {displayedArticles.length > 0 ? (
                   displayedArticles.map((article, index) => (
-                    <div
+                    <button
                       key={article.id}
+                      onClick={() => setSelectedArticle(article)}
                       className={cn(
-                        'rounded-2xl bg-card overflow-hidden transition-all duration-300 animate-slide-up',
-                        expandedId === article.id ? 'ring-1 ring-primary/30' : ''
+                        'w-full text-left rounded-2xl bg-card p-4 transition-all duration-300 animate-slide-up hover:ring-1 hover:ring-primary/30'
                       )}
                       style={{ animationDelay: `${index * 50}ms` }}
                     >
-                      {/* Collapsed View */}
-                      <button
-                        onClick={() => toggleExpand(article.id)}
-                        className="w-full p-4 text-left"
-                      >
-                        <div className="flex items-center gap-3">
-                          <img
-                            src={article.is_anonymous ? '/placeholder.svg' : article.author?.avatar_url || '/placeholder.svg'}
-                            alt={article.is_anonymous ? 'Аноним' : article.author?.first_name || 'Author'}
-                            className="h-10 w-10 flex-shrink-0 rounded-full object-cover"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <h3 className="font-medium text-foreground truncate">
-                              {article.title}
-                            </h3>
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                              <span>{article.is_anonymous ? 'Аноним' : article.author?.first_name}</span>
-                              <span>•</span>
-                              <div className="flex items-center gap-1">
-                                <Heart className="h-3 w-3" />
-                                {article.likes_count}
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <MessageCircle className="h-3 w-3" />
-                                {article.comments_count}
-                              </div>
+                      {/* Author Row */}
+                      <div className="flex items-center gap-3 mb-3">
+                        <img
+                          src={article.is_anonymous ? '/placeholder.svg' : article.author?.avatar_url || '/placeholder.svg'}
+                          alt=""
+                          className="h-12 w-12 flex-shrink-0 rounded-full object-cover"
+                        />
+                        <span className="text-sm text-muted-foreground">
+                          Rep: {article.is_anonymous ? 0 : article.author?.reputation || 0}
+                        </span>
+                      </div>
+
+                      {/* Title */}
+                      <h3 className="font-bold text-lg text-foreground mb-1">
+                        {article.title}
+                      </h3>
+
+                      {/* Preview */}
+                      <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
+                        {article.preview || article.body.substring(0, 100)}
+                      </p>
+
+                      {/* Divider */}
+                      <div className="border-t border-border pt-4">
+                        {/* Actions Row */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            {/* Likes */}
+                            <div className="flex items-center gap-1.5 text-muted-foreground">
+                              <Heart className="h-5 w-5" />
+                              <span className="text-sm">{article.likes_count}</span>
+                            </div>
+                            {/* Comments */}
+                            <div className="flex items-center gap-1.5 text-muted-foreground">
+                              <MessageCircle className="h-5 w-5" />
+                              <span className="text-sm">{article.comments_count}</span>
+                            </div>
+                            {/* Favorites */}
+                            <div className="flex items-center gap-1.5 text-muted-foreground">
+                              <Bookmark className="h-5 w-5" />
+                              <span className="text-sm">{article.favorites_count}</span>
                             </div>
                           </div>
-                          {expandedId === article.id ? (
-                            <ChevronUp className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                          ) : (
-                            <ChevronDown className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                          )}
-                        </div>
-                      </button>
 
-                      {/* Expanded View */}
-                      <div
-                        className={cn(
-                          'overflow-hidden transition-all duration-300',
-                          expandedId === article.id ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
-                        )}
-                      >
-                        <div className="px-4 pb-4">
-                          {/* Media */}
-                          {article.media_url && (
-                            <div className="mb-4 rounded-xl overflow-hidden">
-                              {article.media_type === 'youtube' ? (
-                                <div className="relative aspect-video bg-muted">
-                                  <img
-                                    src={`https://img.youtube.com/vi/${article.media_url}/maxresdefault.jpg`}
-                                    alt={article.title}
-                                    className="w-full h-full object-cover"
-                                  />
-                                  <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/90">
-                                      <Play className="h-6 w-6 text-foreground ml-1" />
-                                    </div>
-                                  </div>
-                                </div>
-                              ) : (
-                                <img
-                                  src={article.media_url}
-                                  alt={article.title}
-                                  className="w-full h-auto"
-                                />
-                              )}
+                          <div className="flex items-center gap-3">
+                            {/* Views */}
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-secondary/50 text-muted-foreground">
+                              <TrendingUp className="h-4 w-4" />
+                              <span className="text-sm">+{article.views_count || 0}</span>
                             </div>
-                          )}
-
-                          {/* Description */}
-                          <p className="text-sm text-muted-foreground mb-4 line-clamp-4">
-                            {article.preview}
-                          </p>
-
-                          {/* Actions */}
-                          <div className="flex items-center justify-between pt-3 border-t border-border">
-                            <div className="flex items-center gap-4">
-                              <div className="flex items-center gap-1.5 text-muted-foreground">
-                                <Heart className="h-5 w-5" />
-                                <span className="text-sm">{article.likes_count}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 text-muted-foreground">
-                                <MessageCircle className="h-5 w-5" />
-                                <span className="text-sm">{article.comments_count}</span>
-                              </div>
-                            </div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setSelectedArticle(article)}
-                            >
-                              Открыть
-                            </Button>
+                            {/* Share */}
+                            <Share2 className="h-5 w-5 text-muted-foreground" />
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </button>
                   ))
                 ) : (
                   <p className="py-12 text-center text-muted-foreground">
@@ -293,6 +260,12 @@ export function FullArticlesModal({
         isOpen={!!selectedArticle}
         onClose={() => setSelectedArticle(null)}
         article={selectedArticle}
+      />
+
+      <CreateArticleModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={handleArticleCreated}
       />
     </>
   );

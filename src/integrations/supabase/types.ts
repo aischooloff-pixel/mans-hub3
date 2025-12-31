@@ -207,6 +207,27 @@ export type Database = {
           },
         ]
       }
+      article_views: {
+        Row: {
+          article_id: string
+          created_at: string
+          id: string
+          user_profile_id: string
+        }
+        Insert: {
+          article_id: string
+          created_at?: string
+          id?: string
+          user_profile_id: string
+        }
+        Update: {
+          article_id?: string
+          created_at?: string
+          id?: string
+          user_profile_id?: string
+        }
+        Relationships: []
+      }
       articles: {
         Row: {
           allow_comments: boolean | null
@@ -232,6 +253,7 @@ export type Database = {
           title: string
           topic: string | null
           updated_at: string | null
+          views_count: number | null
         }
         Insert: {
           allow_comments?: boolean | null
@@ -257,6 +279,7 @@ export type Database = {
           title: string
           topic?: string | null
           updated_at?: string | null
+          views_count?: number | null
         }
         Update: {
           allow_comments?: boolean | null
@@ -282,6 +305,7 @@ export type Database = {
           title?: string
           topic?: string | null
           updated_at?: string | null
+          views_count?: number | null
         }
         Relationships: [
           {

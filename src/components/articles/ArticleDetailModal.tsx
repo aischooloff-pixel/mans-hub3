@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Heart, MessageCircle, Bookmark, Send, Loader2, Crown, Calendar, FileText, Star, Flag, ChevronDown, ChevronUp, Reply } from 'lucide-react';
+import { X, Heart, MessageCircle, Bookmark, Send, Loader2, Crown, Calendar, FileText, Star, Flag, ChevronDown, ChevronUp, Reply, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -51,6 +51,7 @@ export function ArticleDetailModal({
   const [isFavorited, setIsFavorited] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [favoritesCount, setFavoritesCount] = useState(0);
+  const [viewsCount, setViewsCount] = useState(0);
   const [comments, setComments] = useState<Comment[]>([]);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isLoadingState, setIsLoadingState] = useState(false);
@@ -61,12 +62,13 @@ export function ArticleDetailModal({
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
 
-  const { toggleLike, toggleFavorite, addComment, getArticleState, reportArticle } = useArticles();
+  const { toggleLike, toggleFavorite, addComment, getArticleState, reportArticle, addView } = useArticles();
 
   useEffect(() => {
     if (isOpen && article) {
       setLikesCount(article.likes_count || 0);
       setFavoritesCount(article.favorites_count || 0);
+      setViewsCount(article.views_count || 0);
       setIsLiked(false);
       setIsFavorited(false);
       setComments([]);
@@ -83,6 +85,13 @@ export function ArticleDetailModal({
         setIsLoadingState(false);
       });
 
+      // Add view
+      addView(article.id).then((result) => {
+        if (result?.views_count !== undefined) {
+          setViewsCount(result.views_count);
+        }
+      });
+
       // Load author's articles count
       if (article.author && !article.is_anonymous) {
         supabase
@@ -95,7 +104,7 @@ export function ArticleDetailModal({
           });
       }
     }
-  }, [isOpen, article, getArticleState]);
+  }, [isOpen, article, getArticleState, addView]);
 
   if (!isOpen || !article) return null;
 
@@ -477,6 +486,11 @@ export function ArticleDetailModal({
                 </button>
               </div>
               <div className="flex items-center gap-3">
+                {/* Views */}
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-secondary/50 text-muted-foreground">
+                  <TrendingUp className="h-4 w-4" />
+                  <span className="text-sm">+{viewsCount}</span>
+                </div>
                 <button
                   onClick={() => setIsReportOpen(true)}
                   className="text-muted-foreground hover:text-destructive transition-colors"
