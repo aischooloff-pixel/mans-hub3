@@ -2785,9 +2785,16 @@ async function handleBroadcastMediaInput(chatId: number, userId: number, message
 
   console.log('Current broadcast state:', state);
 
+  if (state.step === 'text') {
+    console.log('Media received but still waiting for text');
+    await sendAdminMessage(chatId, '❌ Сначала отправьте текст сообщения (Шаг 1/3), затем пришлите медиа.');
+    return true;
+  }
+
   if (state.step !== 'media') {
-    console.log('Step is not media, skipping. Current step:', state.step);
-    return false;
+    console.log('Media received but not expected at this step:', state.step);
+    await sendAdminMessage(chatId, 'ℹ️ Сейчас медиа не ожидается. Нажмите «Отменить» или начните заново: /broadcast');
+    return true;
   }
 
   let mediaId = '';
@@ -5226,6 +5233,11 @@ Deno.serve(async (req) => {
         if (mediaHandled) {
           return new Response('OK', { headers: corsHeaders });
         }
+      }
+
+      // If this message has no text/caption and wasn't handled above, ignore it
+      if (!text) {
+        return new Response('OK', { headers: corsHeaders });
       }
 
       // Commands
