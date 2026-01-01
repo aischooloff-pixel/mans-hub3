@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Check, Crown, Sparkles, MessageCircle, Users, Infinity, BadgeCheck, Bot, FileText, Headphones, Music, ShoppingBag, GraduationCap, ChevronLeft, ChevronRight, Tag, Loader2, ArrowLeft, HelpCircle } from 'lucide-react';
-import sbpLogo from '@/assets/sbp-logo.jpeg';
-import cryptobotLogo from '@/assets/cryptobot-logo.png';
+import sbpLogo from '@/assets/sbp-logo.png';
+import cryptobotLogo from '@/assets/cryptobot-logo.jpeg';
 import telegramStarsLogo from '@/assets/telegram-stars-logo.jpeg';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
