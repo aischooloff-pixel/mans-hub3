@@ -2799,7 +2799,7 @@ async function handleBroadcastMediaInput(chatId: number, userId: number, message
 
 // Show broadcast preview
 async function showBroadcastPreview(chatId: number, userId: number, text: string, mediaId?: string, mediaType?: string) {
-  const previewText = `📢 <b>Объявление от ManHub</b>\n\n${text}`;
+  const previewText = text;
 
   const keyboard = {
     inline_keyboard: [
@@ -2897,7 +2897,7 @@ async function handleBroadcastConfirm(callbackQuery: any) {
 
   await sendAdminMessage(message.chat.id, `📤 Отправка сообщения ${users.length} пользователям...`);
 
-  const broadcastText = `📢 <b>Объявление от ManHub</b>\n\n${state.text}`;
+  const broadcastText = state.text;
   let sent = 0;
   let failed = 0;
 
