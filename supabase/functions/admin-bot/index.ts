@@ -130,6 +130,7 @@ async function handleStart(chatId: number, userId: number) {
 
 📊 /stats — Статистика проекта
 👥 /users — Список пользователей
+🔗 /ref — Управление рефералами
 👑 /premium — Управление подписками
 💰 /prices — Управление ценами тарифов
 🎟 /pr — Управление промокодами
@@ -331,13 +332,30 @@ async function handleUserProfile(callbackQuery: any, telegramId: string) {
     ? `\n📦 <b>Продукт:</b> ✅ ${products[0].title} (${products[0].status === 'approved' ? '✅' : products[0].status === 'pending' ? '⏳' : '❌'})\n🏷 <b>Код:</b> <code>${products[0].short_code || 'N/A'}</code>`
     : '\n📦 <b>Продукт:</b> ❌ Нет';
 
+  // Get referral info
+  const { count: referralCount } = await supabase
+    .from('profiles')
+    .select('*', { count: 'exact', head: true })
+    .eq('referred_by', user.id);
+
+  const botUsername = getBotUsername();
+  const referralLink = user.referral_code 
+    ? `https://t.me/${botUsername}?start=ref_${user.referral_code}`
+    : 'Не создана';
+
+  const referralInfo = `
+🔗 <b>Реферальная система:</b>
+├ 👥 Приглашено: ${referralCount || 0}
+├ 💰 Заработано: ${user.referral_earnings || 0} ₽
+└ 🔗 Ссылка: <code>${referralLink}</code>`;
+
   const profileMessage = `👤 <b>Профиль пользователя</b>${blocked}
 
 📛 <b>Имя:</b> ${user.first_name || ''} ${user.last_name || ''}
 🔗 <b>Username:</b> ${user.username ? `@${user.username}` : 'Не указан'}
 🆔 <b>Telegram ID:</b> ${user.telegram_id}
 ⭐ <b>Репутация:</b> ${user.reputation || 0}
-📊 <b>Подписка:</b> ${tierLabel}${premiumExpiry}${productInfo}
+📊 <b>Подписка:</b> ${tierLabel}${premiumExpiry}${productInfo}${referralInfo}
 📅 <b>Регистрация:</b> ${new Date(user.created_at).toLocaleDateString('ru-RU')}`;
 
   // Build action buttons
@@ -362,6 +380,13 @@ async function handleUserProfile(callbackQuery: any, telegramId: string) {
       { text: '🟣 Выдать Premium (30д)', callback_data: `sub_grant_premium:${user.telegram_id}` }
     ]);
   }
+
+  // Referral management buttons
+  buttons.push([
+    { text: '💰 +Баланс', callback_data: `ref_add_balance:${user.telegram_id}` },
+    { text: '🗑 Обнулить баланс', callback_data: `ref_reset_balance:${user.telegram_id}` }
+  ]);
+  buttons.push([{ text: '🔄 Обнулить рефералов', callback_data: `ref_reset_referrals:${user.telegram_id}` }]);
 
   // Block/unblock buttons
   if (user.is_blocked) {
@@ -3403,6 +3428,311 @@ async function handleProductDelete(callbackQuery: any, productId: string) {
   await sendAdminMessage(message.chat.id, `🗑 Продукт "${product.title}" удалён`);
 }
 
+// ==================== REFERRAL MANAGEMENT ====================
+
+const REFERRERS_PER_PAGE = 15;
+
+// Get user's bot username from env
+function getBotUsername(): string {
+  // Try to get from env or use default
+  return Deno.env.get('TELEGRAM_BOT_USERNAME') || 'ManHubBot';
+}
+
+// Handle /ref command - list users who invite others
+async function handleReferrals(chatId: number, userId: number, page: number = 0, messageId?: number) {
+  if (!isAdmin(userId)) return;
+
+  const from = page * REFERRERS_PER_PAGE;
+
+  // Get users who have referrals (those who referred at least one person)
+  const { data: referrers, error } = await supabase
+    .from('profiles')
+    .select(`
+      id,
+      telegram_id,
+      username,
+      first_name,
+      last_name,
+      referral_code,
+      referral_earnings
+    `)
+    .not('referral_code', 'is', null)
+    .order('referral_earnings', { ascending: false })
+    .range(from, from + REFERRERS_PER_PAGE - 1);
+
+  if (error) {
+    console.error('Error fetching referrers:', error);
+    await sendAdminMessage(chatId, '❌ Ошибка загрузки данных рефералов');
+    return;
+  }
+
+  // Get total count of referrers
+  const { count: totalCount } = await supabase
+    .from('profiles')
+    .select('*', { count: 'exact', head: true })
+    .not('referral_code', 'is', null);
+
+  // Get referral counts for each referrer
+  const referrerIds = referrers?.map(r => r.id) || [];
+  const referralCounts: Record<string, number> = {};
+  
+  if (referrerIds.length > 0) {
+    for (const referrerId of referrerIds) {
+      const { count } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('referred_by', referrerId);
+      referralCounts[referrerId] = count || 0;
+    }
+  }
+
+  // Sort by referral count descending
+  const sortedReferrers = referrers?.sort((a, b) => 
+    (referralCounts[b.id] || 0) - (referralCounts[a.id] || 0)
+  ) || [];
+
+  const totalPages = Math.ceil((totalCount || 0) / REFERRERS_PER_PAGE);
+
+  let message = `🔗 <b>Управление рефералами</b>\n`;
+  message += `📄 Страница ${page + 1}/${totalPages || 1}\n\n`;
+
+  if (!sortedReferrers || sortedReferrers.length === 0) {
+    message += '<i>Нет пользователей с реферальными ссылками</i>';
+  } else {
+    for (const ref of sortedReferrers) {
+      const username = ref.username ? `@${ref.username}` : `${ref.first_name || 'ID:' + ref.telegram_id}`;
+      const count = referralCounts[ref.id] || 0;
+      const earnings = ref.referral_earnings || 0;
+      message += `👤 <b>${username}</b>\n`;
+      message += `   👥 Приглашено: ${count} | 💰 ${earnings} ₽\n`;
+    }
+  }
+
+  // Build keyboard
+  const buttons: any[][] = [];
+  if (sortedReferrers && sortedReferrers.length > 0) {
+    for (const ref of sortedReferrers) {
+      const label = ref.username ? `@${ref.username}` : `${ref.telegram_id}`;
+      buttons.push([{ text: `⚙️ ${label}`, callback_data: `ref_user:${ref.telegram_id}` }]);
+    }
+  }
+
+  // Pagination
+  const prevPage = page > 0 ? page - 1 : page;
+  const nextPage = page < totalPages - 1 ? page + 1 : page;
+  if (totalPages > 1) {
+    buttons.push([
+      { text: '⬅️ Назад', callback_data: `referrals:${prevPage}` },
+      { text: 'Вперёд ➡️', callback_data: `referrals:${nextPage}` },
+    ]);
+  }
+
+  const keyboard = { inline_keyboard: buttons };
+
+  if (messageId) {
+    await editAdminMessage(chatId, messageId, message, { reply_markup: keyboard });
+  } else {
+    await sendAdminMessage(chatId, message, { reply_markup: keyboard });
+  }
+}
+
+// Handle viewing referrer details
+async function handleReferrerProfile(callbackQuery: any, telegramId: string) {
+  const { id, message } = callbackQuery;
+
+  const { data: user, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('telegram_id', telegramId)
+    .maybeSingle();
+
+  if (error || !user) {
+    await answerCallbackQuery(id, '❌ Пользователь не найден');
+    return;
+  }
+
+  // Get referral count
+  const { count: referralCount } = await supabase
+    .from('profiles')
+    .select('*', { count: 'exact', head: true })
+    .eq('referred_by', user.id);
+
+  // Get list of referred users (last 5)
+  const { data: referredUsers } = await supabase
+    .from('profiles')
+    .select('telegram_id, username, first_name, created_at')
+    .eq('referred_by', user.id)
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  const botUsername = getBotUsername();
+  const referralLink = user.referral_code 
+    ? `https://t.me/${botUsername}?start=ref_${user.referral_code}`
+    : 'Не создана';
+
+  const username = user.username ? `@${user.username}` : (user.first_name || `ID:${user.telegram_id}`);
+
+  let profileMessage = `🔗 <b>Реферальный профиль</b>
+
+👤 <b>Пользователь:</b> ${username}
+🆔 <b>Telegram ID:</b> ${user.telegram_id}
+
+📊 <b>Статистика:</b>
+├ 👥 Приглашено: ${referralCount || 0}
+├ 💰 Заработано: ${user.referral_earnings || 0} ₽
+└ 🔗 Код: <code>${user.referral_code || 'Нет'}</code>
+
+🔗 <b>Ссылка:</b>
+<code>${referralLink}</code>`;
+
+  if (referredUsers && referredUsers.length > 0) {
+    profileMessage += `\n\n👥 <b>Последние приглашённые:</b>`;
+    for (const ru of referredUsers) {
+      const ruName = ru.username ? `@${ru.username}` : (ru.first_name || `ID:${ru.telegram_id}`);
+      const date = new Date(ru.created_at).toLocaleDateString('ru-RU');
+      profileMessage += `\n├ ${ruName} (${date})`;
+    }
+  }
+
+  const buttons: any[][] = [
+    [
+      { text: '💰 Добавить баланс', callback_data: `ref_add_balance:${user.telegram_id}` },
+      { text: '🗑 Обнулить баланс', callback_data: `ref_reset_balance:${user.telegram_id}` }
+    ],
+    [{ text: '🔄 Обнулить рефералов', callback_data: `ref_reset_referrals:${user.telegram_id}` }],
+    [{ text: '◀️ К списку рефералов', callback_data: 'referrals:0' }]
+  ];
+
+  const keyboard = { inline_keyboard: buttons };
+
+  await answerCallbackQuery(id);
+  await editAdminMessage(message.chat.id, message.message_id, profileMessage, { reply_markup: keyboard });
+}
+
+// Handle reset referrals
+async function handleResetReferrals(callbackQuery: any, telegramId: string) {
+  const { id, message } = callbackQuery;
+
+  const { data: user } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('telegram_id', telegramId)
+    .maybeSingle();
+
+  if (!user) {
+    await answerCallbackQuery(id, '❌ Пользователь не найден');
+    return;
+  }
+
+  // Remove referred_by for all users who were referred by this user
+  const { error } = await supabase
+    .from('profiles')
+    .update({ referred_by: null })
+    .eq('referred_by', user.id);
+
+  if (error) {
+    console.error('Error resetting referrals:', error);
+    await answerCallbackQuery(id, '❌ Ошибка сброса');
+    return;
+  }
+
+  await answerCallbackQuery(id, '✅ Рефералы обнулены');
+  await handleReferrerProfile(callbackQuery, telegramId);
+}
+
+// Handle reset balance
+async function handleResetReferralBalance(callbackQuery: any, telegramId: string) {
+  const { id, message } = callbackQuery;
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ referral_earnings: 0 })
+    .eq('telegram_id', telegramId);
+
+  if (error) {
+    console.error('Error resetting balance:', error);
+    await answerCallbackQuery(id, '❌ Ошибка сброса');
+    return;
+  }
+
+  await answerCallbackQuery(id, '✅ Баланс обнулён');
+  await handleReferrerProfile(callbackQuery, telegramId);
+}
+
+// Pending balance additions (for input handling)
+const pendingBalanceAdditions = new Map<number, string>(); // adminId -> targetTelegramId
+
+// Handle add balance start
+async function handleAddBalanceStart(callbackQuery: any, telegramId: string) {
+  const { id, message, from } = callbackQuery;
+
+  pendingBalanceAdditions.set(from.id, telegramId);
+
+  await answerCallbackQuery(id);
+  await sendAdminMessage(message.chat.id, `💰 Введите сумму для добавления к балансу пользователя (в рублях):
+
+Пример: <code>500</code>
+
+Для отмены отправьте /cancel`);
+}
+
+// Handle balance input
+async function handleBalanceInput(chatId: number, adminId: number, text: string): Promise<boolean> {
+  const targetTelegramId = pendingBalanceAdditions.get(adminId);
+  if (!targetTelegramId) return false;
+
+  if (text === '/cancel') {
+    pendingBalanceAdditions.delete(adminId);
+    await sendAdminMessage(chatId, '❌ Отменено');
+    return true;
+  }
+
+  const amount = parseFloat(text);
+  if (isNaN(amount) || amount <= 0) {
+    await sendAdminMessage(chatId, '❌ Введите корректную сумму (положительное число)');
+    return true;
+  }
+
+  // Get current balance
+  const { data: user } = await supabase
+    .from('profiles')
+    .select('referral_earnings')
+    .eq('telegram_id', targetTelegramId)
+    .maybeSingle();
+
+  if (!user) {
+    pendingBalanceAdditions.delete(adminId);
+    await sendAdminMessage(chatId, '❌ Пользователь не найден');
+    return true;
+  }
+
+  const newBalance = (user.referral_earnings || 0) + amount;
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ referral_earnings: newBalance })
+    .eq('telegram_id', targetTelegramId);
+
+  pendingBalanceAdditions.delete(adminId);
+
+  if (error) {
+    console.error('Error adding balance:', error);
+    await sendAdminMessage(chatId, '❌ Ошибка добавления баланса');
+    return true;
+  }
+
+  await sendAdminMessage(chatId, `✅ Добавлено ${amount} ₽ к балансу
+
+Новый баланс: ${newBalance} ₽`, {
+    reply_markup: {
+      inline_keyboard: [[{ text: '◀️ К профилю', callback_data: `ref_user:${targetTelegramId}` }]]
+    }
+  });
+  return true;
+}
+
+// ==================== END REFERRAL MANAGEMENT ====================
+
 // Handle callback queries
 async function handleCallbackQuery(callbackQuery: any) {
   const { data, from, message } = callbackQuery;
@@ -3528,6 +3858,17 @@ async function handleCallbackQuery(callbackQuery: any) {
   } else if (action === 'hi') {
     // New /hi callback format: hi:action:param
     await handleHiCallback(callbackQuery, param || '', param2);
+  } else if (action === 'referrals') {
+    await answerCallbackQuery(callbackQuery.id);
+    await handleReferrals(message.chat.id, from.id, parseInt(param || '0'), message.message_id);
+  } else if (action === 'ref_user') {
+    await handleReferrerProfile(callbackQuery, param);
+  } else if (action === 'ref_reset_referrals') {
+    await handleResetReferrals(callbackQuery, param);
+  } else if (action === 'ref_reset_balance') {
+    await handleResetReferralBalance(callbackQuery, param);
+  } else if (action === 'ref_add_balance') {
+    await handleAddBalanceStart(callbackQuery, param);
   }
 }
 
@@ -4516,10 +4857,18 @@ Deno.serve(async (req) => {
         await handleSearchProduct(chat.id, from.id, '');
       } else if (text === '/hi') {
         await handleHi(chat.id, from.id);
+      } else if (text === '/ref') {
+        await handleReferrals(chat.id, from.id);
       } else if (text === '/help') {
         await handleStart(chat.id, from.id);
       } else {
-        // FIRST: Check hi pending input mode
+        // FIRST: Check balance input for referral management
+        const balanceHandled = await handleBalanceInput(chat.id, from.id, text);
+        if (balanceHandled) {
+          return new Response('OK', { headers: corsHeaders });
+        }
+
+        // Check hi pending input mode
         const hiHandled = await handleHiPendingInput(chat.id, from.id, text);
         if (hiHandled) {
           return new Response('OK', { headers: corsHeaders });
