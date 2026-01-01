@@ -105,13 +105,15 @@ Deno.serve(async (req) => {
       if (filter === 'likes') {
         query = query.eq('type', 'like');
       } else if (filter === 'comments') {
-        query = query.eq('type', 'comment');
+        query = query.in('type', ['comment', 'reply', 'mention']);
       } else if (filter === 'rep') {
         query = query.eq('type', 'rep');
       } else if (filter === 'articles') {
         query = query.in('type', ['article_approved', 'article_rejected']);
       } else if (filter === 'favorites') {
         query = query.eq('type', 'favorite');
+      } else if (filter === 'badges') {
+        query = query.eq('type', 'badge');
       }
     }
 

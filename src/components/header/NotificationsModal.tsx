@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Heart, MessageSquare, TrendingUp, Check, FileText, Star, Bookmark, Loader2, ChevronDown } from 'lucide-react';
+import { X, Heart, MessageSquare, TrendingUp, Check, FileText, Star, Bookmark, Loader2, ChevronDown, Award } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,7 +13,7 @@ interface NotificationsModalProps {
 
 interface Notification {
   id: string;
-  type: 'like' | 'comment' | 'rep' | 'article_approved' | 'article_rejected' | 'favorite' | 'reply';
+  type: 'like' | 'comment' | 'rep' | 'article_approved' | 'article_rejected' | 'favorite' | 'reply' | 'badge' | 'mention';
   message: string;
   is_read: boolean;
   created_at: string;
@@ -22,7 +22,7 @@ interface Notification {
   from_user?: { id: string; first_name: string | null; last_name: string | null; username: string | null; avatar_url: string | null } | null;
 }
 
-type FilterType = 'all' | 'likes' | 'comments' | 'rep' | 'articles' | 'favorites';
+type FilterType = 'all' | 'likes' | 'comments' | 'rep' | 'articles' | 'favorites' | 'badges';
 
 export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps) {
   const { webApp } = useTelegram();
@@ -104,6 +104,10 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
         return <X className="h-4 w-4 text-red-500" />;
       case 'favorite':
         return <Bookmark className="h-4 w-4 text-yellow-500" />;
+      case 'badge':
+        return <Award className="h-4 w-4 text-primary" />;
+      case 'mention':
+        return <MessageSquare className="h-4 w-4 text-cyan-500" />;
       default:
         return <Star className="h-4 w-4 text-primary" />;
     }
@@ -126,6 +130,7 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
 
   const filters: { key: FilterType; label: string }[] = [
     { key: 'all', label: 'Все' },
+    { key: 'badges', label: 'Значки' },
     { key: 'likes', label: 'Лайки' },
     { key: 'comments', label: 'Комментарии' },
     { key: 'rep', label: 'Репутация' },
@@ -133,7 +138,17 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
     { key: 'favorites', label: 'Избранное' },
   ];
 
-  const displayedNotifications = showAll ? notifications : notifications.slice(0, 5);
+  // Sort notifications: unread first, then by date
+  const sortedNotifications = [...notifications].sort((a, b) => {
+    // Unread first
+    if (a.is_read !== b.is_read) {
+      return a.is_read ? 1 : -1;
+    }
+    // Then by date (newest first)
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+
+  const displayedNotifications = showAll ? sortedNotifications : sortedNotifications.slice(0, 5);
 
   if (!isOpen) return null;
 
@@ -183,9 +198,9 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </div>
-            ) : notifications.length > 0 ? (
+            ) : sortedNotifications.length > 0 ? (
               <div className="divide-y divide-border">
-                {notifications.map((notification) => {
+                {sortedNotifications.map((notification) => {
                   const hasArticle = notification.article_id || notification.article?.id;
                   return (
                     <div
