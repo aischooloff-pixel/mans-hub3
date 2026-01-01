@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { SupportModal } from './SupportModal';
+import { useTelegram } from '@/hooks/use-telegram';
 
 interface PremiumModalProps {
   isOpen: boolean;
@@ -41,6 +42,8 @@ export function PremiumModal({ isOpen, onClose }: PremiumModalProps) {
   const [promoApplied, setPromoApplied] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [showSupportModal, setShowSupportModal] = useState(false);
+  const [paymentLoading, setPaymentLoading] = useState<string | null>(null);
+  const { getInitData, webApp } = useTelegram();
   const [pricing, setPricing] = useState<PricingData>({
     plus: { monthly: 299, yearly: 2510, monthlyOriginal: 598, yearlyOriginal: 5020 },
     premium: { monthly: 2490, yearly: 20916, monthlyOriginal: 4980, yearlyOriginal: 41832 },
@@ -212,24 +215,78 @@ export function PremiumModal({ isOpen, onClose }: PremiumModalProps) {
     setSelectedPlan(null);
   };
 
+  const handlePayment = async (methodId: string) => {
+    if (methodId !== 'crypto') {
+      toast.info('Этот способ оплаты скоро будет доступен');
+      return;
+    }
+
+    const initData = getInitData();
+    if (!initData) {
+      toast.error('Откройте приложение через Telegram');
+      return;
+    }
+
+    setPaymentLoading(methodId);
+    try {
+      const price = getCurrentPlanPrice();
+      
+      const { data, error } = await supabase.functions.invoke('cryptobot-create-invoice', {
+        body: {
+          initData,
+          plan: selectedPlan,
+          period: billingPeriod,
+          amount: price,
+          currency: 'RUB',
+        },
+      });
+
+      if (error) {
+        console.error('Invoice error:', error);
+        toast.error('Ошибка создания счёта');
+        return;
+      }
+
+      if (data?.success && data?.mini_app_invoice_url) {
+        // Open CryptoBot payment in Telegram
+        if (webApp?.openTelegramLink) {
+          webApp.openTelegramLink(data.mini_app_invoice_url);
+        } else {
+          window.open(data.invoice_url, '_blank');
+        }
+        toast.success('Счёт создан! Перейдите к оплате');
+      } else {
+        toast.error(data?.error || 'Ошибка создания счёта');
+      }
+    } catch (err) {
+      console.error('Payment error:', err);
+      toast.error('Произошла ошибка при создании платежа');
+    } finally {
+      setPaymentLoading(null);
+    }
+  };
+
   const paymentMethods = [
     {
       id: 'sbp',
       name: 'СБП',
       description: 'Система быстрых платежей',
       logo: sbpLogo,
+      enabled: false,
     },
     {
       id: 'crypto',
       name: 'Крипта',
       description: 'CryptoBot',
       logo: cryptobotLogo,
+      enabled: true,
     },
     {
       id: 'stars',
       name: 'Telegram Stars',
       description: 'Звёзды Telegram',
       logo: telegramStarsLogo,
+      enabled: false,
     },
   ];
 
@@ -315,18 +372,30 @@ export function PremiumModal({ isOpen, onClose }: PremiumModalProps) {
                 
                 <div className="space-y-3">
                   {paymentMethods.map((method) => (
-                    <div
+                    <button
                       key={method.id}
-                      className="flex items-center gap-4 p-4 rounded-xl border border-border bg-card/50 cursor-default"
+                      onClick={() => handlePayment(method.id)}
+                      disabled={paymentLoading !== null || !method.enabled}
+                      className={cn(
+                        "flex items-center gap-4 p-4 rounded-xl border w-full text-left transition-all",
+                        method.enabled 
+                          ? "border-border bg-card/50 hover:border-primary hover:bg-primary/5 cursor-pointer" 
+                          : "border-border/50 bg-card/30 opacity-60 cursor-not-allowed"
+                      )}
                     >
                       <div className="flex-shrink-0">
                         <img src={method.logo} alt={method.name} className="h-10 w-10 rounded-lg object-cover" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium">{method.name}</p>
-                        <p className="text-sm text-muted-foreground">{method.description}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {method.enabled ? method.description : 'Скоро'}
+                        </p>
                       </div>
-                    </div>
+                      {paymentLoading === method.id && (
+                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                      )}
+                    </button>
                   ))}
                 </div>
 

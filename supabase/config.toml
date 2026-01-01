@@ -86,3 +86,9 @@ verify_jwt = false
 
 [functions.tg-user-reputation]
 verify_jwt = false
+
+[functions.cryptobot-webhook]
+verify_jwt = false
+
+[functions.cryptobot-create-invoice]
+verify_jwt = false
