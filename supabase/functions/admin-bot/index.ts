@@ -2130,7 +2130,10 @@ async function handlePending(chatId: number, userId: number) {
 async function handleArticles(chatId: number, userId: number, page: number = 0, messageId?: number, searchQuery?: string) {
   if (!isAdmin(userId)) return;
 
-  const from = page * ARTICLES_PER_PAGE;
+  console.log('handleArticles called:', { chatId, userId, page, messageId, searchQuery });
+
+  try {
+    const from = page * ARTICLES_PER_PAGE;
 
   let query = supabase
     .from('articles')
@@ -2201,6 +2204,10 @@ async function handleArticles(chatId: number, userId: number, page: number = 0, 
     await editAdminMessage(chatId, messageId, message, { reply_markup: keyboard });
   } else {
     await sendAdminMessage(chatId, message, { reply_markup: keyboard });
+  }
+  } catch (error) {
+    console.error('Error in handleArticles:', error);
+    await sendAdminMessage(chatId, '❌ Ошибка при загрузке статей. Попробуйте позже.');
   }
 }
 
