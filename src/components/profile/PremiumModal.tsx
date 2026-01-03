@@ -247,14 +247,28 @@ export function PremiumModal({ isOpen, onClose, telegramId: propTelegramId, curr
       }
 
       if (data?.success && data?.invoice_url) {
-        // For Stars, the invoice_url opens in Telegram directly
+        // For Stars, use openInvoice method (native Telegram payment UI)
         if (methodId === 'stars') {
-          if (webApp?.openTelegramLink) {
-            webApp.openTelegramLink(data.invoice_url);
+          if (webApp?.openInvoice) {
+            // openInvoice expects the invoice link and shows native payment UI
+            webApp.openInvoice(data.invoice_url, (status: string) => {
+              console.log('Invoice status:', status);
+              if (status === 'paid') {
+                toast.success('Оплата успешна! Подписка активирована');
+                onClose();
+                // Refresh page to update subscription status
+                window.location.reload();
+              } else if (status === 'cancelled') {
+                toast.info('Оплата отменена');
+              } else if (status === 'failed') {
+                toast.error('Ошибка оплаты');
+              }
+            });
           } else {
+            // Fallback for non-WebApp environment
             window.open(data.invoice_url, '_blank');
+            toast.success(`Счёт создан на ${data.stars_amount} ⭐ Stars`);
           }
-          toast.success(`Счёт создан на ${data.stars_amount} ⭐ Stars`);
         } else {
           // CryptoBot payment - prefer mini_app_invoice_url in Telegram
           const paymentUrl = data.mini_app_invoice_url || data.invoice_url;
